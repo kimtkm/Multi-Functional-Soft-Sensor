@@ -1,0 +1,171 @@
+import numpy as np
+import tensorflow as tf
+import os
+from openpyxl import Workbook
+new_wb = Workbook()
+new_sheet = new_wb.create_sheet('test result')
+
+DataCulumn=3
+
+xy = np.loadtxt('XXX.csv', delimiter=',', dtype=np.float32)
+x_Training_data = xy[:, [0, 1, 2]]
+y_Training_data = xy[:, [-1]]
+z_Training_data = np.concatenate([x_Training_data, y_Training_data],axis=1)
+z_shuffle = np.random.permutation(z_Training_data)
+x_Training_data = z_shuffle[:, [0, 1, 2]]
+y_Training_data = z_shuffle[:, [-1]]
+
+xy = np.loadtxt('XXX.csv', delimiter=',', dtype=np.float32)
+x_Test_data = xy[:, [0, 1, 2]]
+y_Test_data = xy[:, [-1]]
+
+Release = 0
+Stretching = 0
+StretchingBending = 0
+StretchingBendingCompressing = 0
+Bending = 0
+Compressing = 0
+StretchingCompressing = 0
+BendingCompressing = 0
+TotalRelease = 0
+TotalStretching = 0
+TotalStretchingBending = 0
+TotalStretchingBendingCompressing = 0
+TotalBending = 0
+TotalCompressing = 0
+TotalStretchingCompressing = 0
+TotalBendingCompressing = 0
+
+nb_classes = 8
+
+X = tf.placeholder(tf.float32, [None, DataCulumn])
+Y= tf.placeholder(tf.int32, [None,1])
+
+Y_one_hot = tf.one_hot(Y, nb_classes)
+Y_one_hot = tf.reshape(Y_one_hot, [-1, nb_classes])
+
+keep_prob = tf.placeholder(tf.float32)
+
+W1 = tf.Variable(tf.random_normal([DataCulumn,128]), name='weight')
+b1 = tf.Variable(tf.random_normal([128]), name='bias')
+L1 = tf.nn.leaky_relu(tf.matmul(X,W1)+b1)
+L1 = tf.nn.dropout(L1, keep_prob=0.8)
+
+W2 = tf.Variable(tf.random_normal([128,64]), name='weight')
+b2 = tf.Variable(tf.random_normal([64]), name='bias')
+L2 = tf.nn.leaky_relu(tf.matmul(L1,W2)+b2)
+L2 = tf.nn.dropout(L2, keep_prob=0.8)
+
+W3 = tf.Variable(tf.random_normal([64,32]), name='weight')
+b3 = tf.Variable(tf.random_normal([32]), name='bias')
+L3 = tf.nn.leaky_relu(tf.matmul(L2,W3)+b3)
+L3 = tf.nn.dropout(L3, keep_prob=0.8)
+
+W4 = tf.Variable(tf.random_normal([32, nb_classes]), name='weight')
+b4 = tf.Variable(tf.random_normal([nb_classes]), name='bias')
+
+logits = tf.matmul(L3, W4) + b4
+hypothesis = tf.nn.softmax(logits)
+
+cost_i = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=Y_one_hot)
+
+cost = tf.reduce_mean(cost_i)
+optimizer = tf.train.AdamOptimizer(learning_rate=0.0095).minimize(cost)
+
+prediction = tf.argmax(hypothesis, 1)
+correct_prediction = tf.equal(prediction, tf.argmax(Y_one_hot, 1))
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    
+    batch_size = 512
+    training_epochs = 5000
+    
+    for epoch in range(training_epochs):
+        batch_count = int(x_Training_data.shape[0]/batch_size)
+        #batch = mnist.train.next_batch(50)
+        for i in range(batch_count) :
+        
+            batch_xs, batch_ys = x_Training_data[i*batch_size:i*batch_size + batch_size], y_Training_data[i*batch_size:i*batch_size + batch_size]
+            sess.run(optimizer, feed_dict={X: batch_xs, Y: batch_ys})
+            if i/batch_count == 0:
+                loss, acc = sess.run([cost, accuracy], feed_dict={X: batch_xs, Y: batch_ys})
+                if epoch % 100 == 0:
+                    print("Epoch: {:5}\tLoss: {:.3f}\tAcc: {:.2%}".format(epoch, loss, acc))
+            
+    pred = sess.run(prediction, feed_dict={X: x_Test_data})
+    
+    for p, y in zip(pred, y_Test_data.flatten()):
+        new_sheet.append([p])
+        if int(y) == 0 :
+            TotalRelease = TotalRelease + 1    
+            if p == int(y) :
+                Release = Release + 1
+        elif int(y) == 1 :
+            TotalStretching = TotalStretching + 1
+            if p == int(y) :
+                Stretching = Stretching + 1
+        elif int(y) == 2 :
+            TotalBending = TotalBending + 1
+            if p == int(y) :
+                Bending = Bending + 1        
+        elif int(y) == 3 :
+            TotalCompressing = TotalCompressing + 1
+            if p == int(y) :
+                Compressing = Compressing + 1 
+        elif int(y) == 4 :
+            TotalStretchingBending = TotalStretchingBending + 1
+            if p == int(y) :
+                StretchingBending = StretchingBending + 1
+        elif int(y) == 7 :
+            TotalStretchingBendingCompressing = TotalStretchingBendingCompressing + 1
+            if p == int(y) :
+                StretchingBendingCompressing = StretchingBendingCompressing + 1
+        elif int(y) == 6 :
+            TotalBendingCompressing = TotalBendingCompressing + 1
+            if p == int(y) :
+                BendingCompressing = BendingCompressing + 1
+        elif int(y) == 5 :
+            TotalStretchingCompressing = TotalStretchingCompressing + 1
+            if p == int(y) :
+                StretchingCompressing = StretchingCompressing + 1
+
+    new_wb.save('XXX.xlsx')
+    
+    
+    ReleasePercent = ( Release / TotalRelease ) * 100
+    StretchingPercent = ( Stretching / TotalStretching ) * 100
+    StretchingBendingPercent = ( StretchingBending / TotalStretchingBending ) * 100
+    StretchingBendingCompressingPercent = ( StretchingBendingCompressing / TotalStretchingBendingCompressing ) * 100
+    BendingPercent = ( Bending / TotalBending ) * 100
+    CompressingPercent = ( Compressing / TotalCompressing ) * 100
+    StretchingCompressingPercent = ( StretchingCompressing / TotalStretchingCompressing ) * 100
+    BendingCompressingPercent = ( BendingCompressing / TotalBendingCompressing ) * 100
+    print(pred.T)
+
+    print("Release => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalRelease, Release, ReleasePercent))
+    print("Stretching => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalStretching, Stretching, StretchingPercent))
+    print("StretchingBending => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalStretchingBending, StretchingBending, StretchingBendingPercent))
+    print("StretchingBendingCompressing => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalStretchingBendingCompressing, StretchingBendingCompressing, StretchingBendingCompressingPercent))
+    print("Bending => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalBending, Bending,BendingPercent))
+    print("StretchingCompressing => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalStretchingCompressing, StretchingCompressing, StretchingCompressingPercent))
+    print("BendingCompressing => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalBendingCompressing, BendingCompressing, BendingCompressingPercent))
+    print("Compressing => Actual Number: {}, Exp Number: {}, Accuracy: {}".format(TotalCompressing, Compressing, CompressingPercent))
+
+Release = 0
+Stretching = 0
+StretchingBending = 0
+StretchingBendingCompressing = 0
+Bending = 0
+Compressing = 0
+StretchingCompressing = 0
+BendingCompressing = 0
+TotalRelease = 0
+TotalStretching = 0
+TotalStretchingBending = 0
+TotalStretchingBendingCompressing = 0
+TotalBending = 0
+TotalCompressing = 0
+TotalStretchingCompressing = 0
+TotalBendingCompressing = 0
